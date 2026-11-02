@@ -11,7 +11,9 @@ jobs:
           sudo apt-get -qq update >/dev/null 2>&1; sudo apt-get -qq install -y xvfb >/dev/null 2>&1
           getent hosts api.foxrouter.org
           echo "127.0.0.1 api.foxrouter.org" | sudo tee -a /etc/hosts
-          getent hosts api.foxrouter.org
+          CFIP=$(getent ahostsv4 challenges.cloudflare.com | awk '{print $1}' | head -1); echo "cfip=$CFIP"
+          for h in brunhild.challenges.cloudflare.com hagen.challenges.cloudflare.com; do echo "$CFIP $h" | sudo tee -a /etc/hosts; done
+          getent hosts api.foxrouter.org brunhild.challenges.cloudflare.com hagen.challenges.cloudflare.com
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -21,7 +23,7 @@ jobs:
           cd "$RUNNER_TEMP"; mkdir -p w; cd w
           npm init -y >/dev/null 2>&1; npm i playwright-core@1.47.2 --silent >/dev/null 2>&1
           cp "$GITHUB_WORKSPACE/r.js" "$GITHUB_WORKSPACE/page.html" .
-          sudo -E xvfb-run -a node r.js 2>&1 | tail -150
+          sudo -E xvfb-run -a node r3.js 2>&1 | tail -150
       - uses: actions/upload-artifact@v4
         if: always()
         with:

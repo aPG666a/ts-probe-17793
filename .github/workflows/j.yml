@@ -1,0 +1,36 @@
+name: j
+on: workflow_dispatch
+jobs:
+  t:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          echo "ip=$(curl -s -m 15 https://api.ipify.org)"
+          sudo apt-get -qq update >/dev/null 2>&1; sudo apt-get -qq install -y xvfb >/dev/null 2>&1
+          for h in likeai520.cc www.likeai520.cc api.likeai520.cc; do getent ahostsv4 $h | head -1; done
+          CFIP=$(getent ahostsv4 challenges.cloudflare.com | awk '{print $1}' | head -1); echo "cfip=$CFIP"
+          for h in brunhild.challenges.cloudflare.com hagen.challenges.cloudflare.com; do echo "$CFIP $h" | sudo tee -a /etc/hosts; done
+          for h in likeai520.cc www.likeai520.cc api.likeai520.cc; do echo "127.0.0.1 $h" | sudo tee -a /etc/hosts; done
+          getent hosts likeai520.cc api.likeai520.cc brunhild.challenges.cloudflare.com
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - env:
+          RUNNER_TEMP: ${{ runner.temp }}
+        run: |
+          cd "$RUNNER_TEMP"
+          openssl req -x509 -newkey rsa:2048 -nodes -keyout k.pem -out c.pem -days 2 -subj "/CN=likeai520.cc" >/dev/null 2>&1
+          mkdir -p w; cd w
+          npm init -y >/dev/null 2>&1; npm i playwright-core@1.47.2 --silent >/dev/null 2>&1
+          cp "$GITHUB_WORKSPACE/j.js" .
+          sudo -E xvfb-run -a node j.js 2>&1 | tail -200
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: j
+          path: |
+            ${{ runner.temp }}/j.log
+            ${{ runner.temp }}/token.txt
+            ${{ runner.temp }}/j_*.png

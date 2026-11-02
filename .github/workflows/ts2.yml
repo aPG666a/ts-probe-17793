@@ -5,6 +5,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      - uses: actions/checkout@v4
       - name: env
         run: |
           echo "ip=$(curl -s -m 15 https://api.ipify.org)"

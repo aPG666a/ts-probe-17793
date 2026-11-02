@@ -1,0 +1,26 @@
+name: d
+on: workflow_dispatch
+jobs:
+  t:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          echo "ip=$(curl -s -m 15 https://api.ipify.org)"
+          sudo apt-get -qq update >/dev/null 2>&1; sudo apt-get -qq install -y xvfb >/dev/null 2>&1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - env:
+          RUNNER_TEMP: ${{ runner.temp }}
+        run: |
+          cd "$RUNNER_TEMP"; mkdir -p w; cd w
+          npm init -y >/dev/null 2>&1; npm i playwright-core@1.47.2 --silent >/dev/null 2>&1; echo npm=$?
+          cp "$GITHUB_WORKSPACE/d.js" .
+          xvfb-run -a node d.js 2>&1 | grep -v '^CONSOLE' | tail -40
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: d
+          path: ${{ runner.temp }}/tok_*.txt

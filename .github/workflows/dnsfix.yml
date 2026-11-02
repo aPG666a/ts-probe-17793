@@ -11,14 +11,14 @@ jobs:
           echo "ip=$(curl -s -m 15 https://api.ipify.org)"
           sudo apt-get -qq update >/dev/null 2>&1; sudo apt-get -qq install -y xvfb dnsutils >/dev/null 2>&1
           echo "--- before"
-          getent ahostsv4 challenges.cloudflare.com brunhild.challenges.cloudflare.com hagen.challenges.cloudflare.com || true
+          getent ahostsv4 challenges.cloudflare.com brunhild.challenges.cloudflare.com hagen.challenges.cloudflare.com foxrouter.org || true
           python3 resolve.py > doh.out 2> doh.err; cat doh.err
           HOSTS=$(grep -E '^[0-9]' doh.out)
           echo "$HOSTS" | sudo tee -a /etc/hosts
           printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' | sudo tee /etc/resolv.conf
-          grep -E '^(CH|BR|HG)=' doh.out >> "$GITHUB_ENV"
+          grep -E '^(CH|BR|HG|FR)=' doh.out >> "$GITHUB_ENV"
           echo "--- after: getent hosts each"
-          for h in challenges.cloudflare.com brunhild.challenges.cloudflare.com hagen.challenges.cloudflare.com api.foxrouter.org; do echo -n "$h => "; getent hosts "$h" | head -2 | tr '\n' ' '; echo; done
+          for h in challenges.cloudflare.com brunhild.challenges.cloudflare.com hagen.challenges.cloudflare.com foxrouter.org api.foxrouter.org; do echo -n "$h => "; getent hosts "$h" | head -2 | tr '\n' ' '; echo; done
       - uses: actions/setup-node@v4
         with:
           node-version: '20'

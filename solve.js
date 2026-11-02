@@ -35,7 +35,7 @@ function handler(req, res) {
   res.end(LOCAL.replace('__SK__', curKey));
 }
 const srvH = http.createServer(handler);
-const srvS = https.createServer({ key: fs.readFileSync('k.pem'), cert: fs.readFileSync('c.pem') }, handler);
+let srvS = null;
 let curKey = REAL;
 
 async function submit(tok, tag) {
@@ -137,10 +137,15 @@ async function round(ctx, which, i, sk) {
 }
 
 (async () => {
-  execSync('openssl req -x509 -newkey rsa:2048 -nodes -keyout k.pem -out c.pem -days 2 -subj "/CN=api.foxrouter.org" 2>/dev/null');
+  if (!fs.existsSync('k.pem')) execSync('openssl req -x509 -newkey rsa:2048 -nodes -keyout k.pem -out c.pem -days 2 -subj "/CN=api.foxrouter.org" 2>/dev/null');
+  srvS = https.createServer({ key: fs.readFileSync('k.pem'), cert: fs.readFileSync('c.pem') }, handler);
   await new Promise(r => srvH.listen(80, '127.0.0.1', r));
   await new Promise(r => srvS.listen(443, '127.0.0.1', r));
   log('local http:80 + https:443 up');
+  for (const h of ['challenges.cloudflare.com', 'brunhild.challenges.cloudflare.com', 'hagen.challenges.cloudflare.com', HOST]) {
+    try { log('PREFLIGHT getent ' + h + ' => ' + execSync('getent ahostsv4 ' + h + ' | head -1').toString().trim()); } catch (e) { log('PREFLIGHT getent FAIL ' + h); }
+  }
+  try { const r = await fetch('https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'); log('PREFLIGHT api.js ' + r.status + ' len=' + (await r.text()).length); } catch (e) { log('PREFLIGHT api.js ERR ' + e); }
   const dir = T + '/prof';
   const ctx = await chromium.launchPersistentContext(dir, {
     executablePath: '/usr/bin/google-chrome', headless: false, userAgent: UA,
@@ -153,6 +158,7 @@ async function round(ctx, which, i, sk) {
       '--host-resolver-rules=MAP brunhild.challenges.cloudflare.com ' + (process.env.BR || '104.18.8.208') +
       ', MAP hagen.challenges.cloudflare.com ' + (process.env.HG || '104.18.9.208') +
       ', MAP challenges.cloudflare.com ' + (process.env.CH || '104.18.94.41') +
+      ', MAP foxrouter.org ' + (process.env.FR || '172.67.188.160') +
       `, MAP ${HOST} 127.0.0.1`]
   });
   await ctx.addInitScript(() => {
@@ -173,5 +179,5 @@ async function round(ctx, which, i, sk) {
     if (got) { log('TOKEN ' + got); fs.writeFileSync(T + '/token.txt', got); log('TOKEN_LINE::' + got); await submit(got, which + '#' + i); }
   }
   log('DONE got=' + got.length);
-  await ctx.close(); srvH.close(); srvS.close(); process.exit(0);
+  await ctx.close(); srvH.close(); if (srvS) srvS.close(); process.exit(0);
 })().catch(e => { log('FATAL ' + e); process.exit(1); });

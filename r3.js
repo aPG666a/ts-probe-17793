@@ -48,9 +48,7 @@ async function humanize(page) {
   await page.mouse.down(); await sleep(rnd(60, 140)); await page.mouse.up();
 }
 
-async function round(browser, sk, label) {
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: 'en-US', timezoneId: 'America/New_York', userAgent: UA });
-  await ctx.addInitScript(() => { Object.defineProperty(navigator, 'webdriver', { get: () => undefined }); });
+async function round(ctx, sk, label) {
   const page = await ctx.newPage();
   page.on('response', async r => {
     const u = r.url();
@@ -75,24 +73,25 @@ async function round(browser, sk, label) {
   const st = await page.evaluate(() => ({ errs: (window.__errs || []).join('|'), html: (document.getElementById('ts') || {}).innerHTML || '', ifr: [...document.querySelectorAll('iframe')].map(f => (f.src || '').slice(0, 80)) }));
   log(`ROUND_END ${label} tok_len=${tok.length} elapsed=${Date.now() - t0} errs=${st.errs} div=${st.html.replace(/\s+/g, ' ').slice(0, 200)} ifr=${JSON.stringify(st.ifr)}`);
   try { fs.writeFileSync(T + `/r_${label}.png`, await page.screenshot()); } catch (e) {}
-  await ctx.close();
+  await page.close();
   return tok;
 }
 
 (async () => {
   await new Promise(r => srv.listen(80, '127.0.0.1', r));
   const dir = T + '/prof';
-  const browser = await chromium.launchPersistentContext(dir, { executablePath: '/usr/bin/google-chrome', headless: false, userAgent: UA,
+  const ctx = await chromium.launchPersistentContext(dir, { executablePath: '/usr/bin/google-chrome', headless: false, userAgent: UA,
     viewport: { width: 1280, height: 800 }, locale: 'en-US', timezoneId: 'America/New_York',
     args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-blink-features=AutomationControlled',
       '--disable-features=ThirdPartyStoragePartitioning,TrackingProtection3pcd,PrivacySandboxSettings4'] });
+  await ctx.addInitScript(() => { Object.defineProperty(navigator, 'webdriver', { get: () => undefined }); });
   let got = '';
   // 1) calibration with official interactive test key
-  for (let i = 1; i <= 2 && !got; i++) { got = await round(browser, TESTINT, 'testint#' + i); if (got) log('CALIBRATION_OK token=' + got); }
+  for (let i = 1; i <= 2 && !got; i++) { got = await round(ctx, TESTINT, 'testint#' + i); if (got) log('CALIBRATION_OK token=' + got); }
   if (!got) log('CALIBRATION_FAIL (interactive test key also unsolved)');
   // 2) real sitekey, max 4 rounds
   if (got) { fs.writeFileSync(T + '/token.txt', got); await submit(got, 'testkey'); }
-  else for (let i = 1; i <= 4 && !got; i++) { got = await round(browser, REAL, 'real#' + i); if (got) { fs.writeFileSync(T + '/token.txt', got); await submit(got, 'real#' + i); } }
+  else for (let i = 1; i <= 4 && !got; i++) { got = await round(ctx, REAL, 'real#' + i); if (got) { fs.writeFileSync(T + '/token.txt', got); await submit(got, 'real#' + i); } }
   log('DONE got=' + got.length);
-  await browser.close(); srv.close(); process.exit(0);
+  await ctx.close(); srv.close(); process.exit(0);
 })().catch(e => { log('FATAL ' + e); process.exit(1); });

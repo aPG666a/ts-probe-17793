@@ -1,0 +1,41 @@
+# 17911 managed / 免交互通道：4 组变体并列 render 真 sitekey，不点击
+name: m4
+on: workflow_dispatch
+jobs:
+  t:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          echo "ip=$(curl -s -m 15 https://api.ipify.org)"
+          sudo apt-get -qq update >/dev/null 2>&1; sudo apt-get -qq install -y xvfb dnsutils >/dev/null 2>&1
+          for ip in 104.16.148.55 104.16.157.68 104.17.246.201 104.17.121.154 104.18.45.2; do echo "$ip foxrouter.org" | sudo tee -a /etc/hosts; done
+          for h in challenges.cloudflare.com brunhild.challenges.cloudflare.com hagen.challenges.cloudflare.com; do
+            ip=$(python3 resolve2.py "$h")
+            [ -z "$ip" ] && ip=$(getent ahostsv4 "$h" | awk '{print $1}' | head -1)
+            echo "$ip $h" | sudo tee -a /etc/hosts
+          done
+          echo "63.141.242.130 api.foxrouter.org" | sudo tee -a /etc/hosts
+          for h in foxrouter.org challenges.cloudflare.com brunhild.challenges.cloudflare.com hagen.challenges.cloudflare.com; do echo -n "$h => "; getent ahostsv4 "$h" | head -1; done
+          curl -s -o /dev/null -w "signin=%{http_code}\n" -m 25 --resolve foxrouter.org:443:104.16.148.55 https://foxrouter.org/sign-in
+          curl -s -o /dev/null -w "apijs=%{http_code}\n" -m 25 https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - env:
+          RUNNER_TEMP: ${{ runner.temp }}
+          ROUNDS: '6'
+          SECS: '120'
+        run: |
+          cd "$RUNNER_TEMP"; mkdir -p w; cd w
+          npm init -y >/dev/null 2>&1; npm i playwright-core@1.47.2 --silent >/dev/null 2>&1
+          cp "$GITHUB_WORKSPACE/m4.js" .
+          sudo -E xvfb-run -a node m4.js 2>&1 | tail -600
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: m4
+          path: |
+            ${{ runner.temp }}/r.log
+            ${{ runner.temp }}/token_*.txt

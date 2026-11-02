@@ -1,0 +1,28 @@
+name: e
+on: workflow_dispatch
+jobs:
+  t:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          echo "ip=$(curl -s -m 15 https://api.ipify.org)"
+          sudo apt-get -qq update >/dev/null 2>&1; sudo apt-get -qq install -y xvfb >/dev/null 2>&1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - env:
+          RUNNER_TEMP: ${{ runner.temp }}
+        run: |
+          cd "$RUNNER_TEMP"; mkdir -p w; cd w
+          npm init -y >/dev/null 2>&1; npm i playwright-core@1.47.2 --silent >/dev/null 2>&1
+          npx playwright-core install firefox >/dev/null 2>&1 || true
+          cp "$GITHUB_WORKSPACE/e.js" .
+          xvfb-run -a node e.js > /dev/null 2>&1
+          cat "$RUNNER_TEMP/out/log.txt" 2>/dev/null | cut -c1-1200
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e
+          path: ${{ runner.temp }}/out

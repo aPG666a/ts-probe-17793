@@ -1,0 +1,10 @@
+<!doctype html><html><head><meta charset="utf-8"><title>ts</title>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
+</head><body><h3>ts</h3><div id="ts"></div>
+<script>
+window.__tok='';window.__errs=[];
+(function boot(){ if(!window.turnstile){return setTimeout(boot,300);}
+ try{ window.turnstile.render('#ts',{sitekey:'0x4AAAAAAEGBqst_6XV04SLn',appearance:'always',size:'flexible',
+   callback:t=>{window.__tok=t},'error-callback':e=>window.__errs.push(String(e)),'timeout-callback':()=>window.__errs.push('TIMEOUT')});}
+ catch(e){window.__errs.push('THROW:'+e)} })();
+</script></body></html>

@@ -1,0 +1,30 @@
+name: r
+on: workflow_dispatch
+jobs:
+  t:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          echo "ip=$(curl -s -m 15 https://api.ipify.org)"
+          sudo apt-get -qq update >/dev/null 2>&1; sudo apt-get -qq install -y xvfb >/dev/null 2>&1
+          getent hosts api.foxrouter.org
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - env:
+          RUNNER_TEMP: ${{ runner.temp }}
+        run: |
+          cd "$RUNNER_TEMP"; mkdir -p w; cd w
+          npm init -y >/dev/null 2>&1; npm i playwright-core@1.47.2 --silent >/dev/null 2>&1
+          cp "$GITHUB_WORKSPACE/r.js" "$GITHUB_WORKSPACE/page.html" .
+          sudo xvfb-run -a node r.js 2>&1 | tail -120
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: r
+          path: |
+            ${{ runner.temp }}/r.log
+            ${{ runner.temp }}/token.txt
+            ${{ runner.temp }}/r_*.png

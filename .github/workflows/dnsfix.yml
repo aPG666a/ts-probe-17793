@@ -1,43 +1,46 @@
-# 17860 dns fix + turnstile render
+# 17924: real https sign-in + 3x calibration (correct interactive test key) + all CF hosts pinned to measured IPv4
 name: dnsfix
 on: workflow_dispatch
 jobs:
   t:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - run: |
           echo "ip=$(curl -s -m 15 https://api.ipify.org)"
           sudo apt-get -qq update >/dev/null 2>&1; sudo apt-get -qq install -y xvfb dnsutils >/dev/null 2>&1
-          echo "--- before"
-          getent ahostsv4 challenges.cloudflare.com brunhild.challenges.cloudflare.com hagen.challenges.cloudflare.com foxrouter.org || true
-          python3 resolve.py > doh.out 2> doh.err; cat doh.err
-          HOSTS=$(grep -E '^[0-9]' doh.out)
-          echo "$HOSTS" | sudo tee -a /etc/hosts
-          printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' | sudo tee /etc/resolv.conf
-          grep -E '^(CH|BR|HG|FR)=' doh.out >> "$GITHUB_ENV"
-          echo "--- after: getent hosts each"
-          for h in challenges.cloudflare.com brunhild.challenges.cloudflare.com hagen.challenges.cloudflare.com foxrouter.org api.foxrouter.org; do echo -n "$h => "; getent hosts "$h" | head -2 | tr '\n' ' '; echo; done
+          # 实测 A 记录直接写死（fact 17915），DoH 只作核对
+          for ip in 104.16.148.55 104.16.157.68 104.17.246.201 104.17.121.154 104.18.45.2; do echo "$ip foxrouter.org" | sudo tee -a /etc/hosts; done
+          for h in challenges.cloudflare.com brunhild.challenges.cloudflare.com hagen.challenges.cloudflare.com; do
+            ip=$(python3 resolve2.py "$h")
+            [ -z "$ip" ] && ip=$(getent ahostsv4 "$h" | awk '{print $1}' | head -1)
+            echo "$ip $h" | sudo tee -a /etc/hosts
+          done
+          echo "63.141.242.130 api.foxrouter.org" | sudo tee -a /etc/hosts
+          tail -12 /etc/hosts
+          for h in foxrouter.org challenges.cloudflare.com brunhild.challenges.cloudflare.com hagen.challenges.cloudflare.com; do echo -n "$h => "; getent ahostsv4 "$h" | head -1; done
+          echo "--- smoke"
+          curl -s -o /dev/null -w "signin=%{http_code}\n" -m 25 --resolve foxrouter.org:443:104.16.148.55 https://foxrouter.org/sign-in
+          curl -s -o /dev/null -w "apijs=%{http_code}\n" -m 25 https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
       - env:
           RUNNER_TEMP: ${{ runner.temp }}
           ROUNDS: '6'
-          SECS: '150'
+          SECS: '180'
+          FR: '104.16.148.55'
         run: |
           cd "$RUNNER_TEMP"; mkdir -p w; cd w
           npm init -y >/dev/null 2>&1; npm i playwright-core@1.47.2 --silent >/dev/null 2>&1
-          cp "$GITHUB_WORKSPACE/solve.js" "$GITHUB_WORKSPACE/page_local.html" .
-          echo "127.0.0.1 api.foxrouter.org" | sudo tee -a /etc/hosts
-          getent hosts api.foxrouter.org
-          sudo -E xvfb-run -a node solve.js 2>&1 | tail -400
+          cp "$GITHUB_WORKSPACE/solve.js" .
+          sudo -E xvfb-run -a node solve.js 2>&1 | tail -500
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: dnsfix
           path: |
             ${{ runner.temp }}/r.log
-            ${{ runner.temp }}/token.txt
+            ${{ runner.temp }}/token*.txt
             ${{ runner.temp }}/shot_*.png

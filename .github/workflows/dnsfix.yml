@@ -1,39 +1,22 @@
-# 17860 dns fix
+# 17860 dns fix + turnstile render
 name: dnsfix
 on: workflow_dispatch
 jobs:
   t:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
       - run: |
           echo "ip=$(curl -s -m 15 https://api.ipify.org)"
           sudo apt-get -qq update >/dev/null 2>&1; sudo apt-get -qq install -y xvfb dnsutils >/dev/null 2>&1
-          echo "--- before: getent"
-          getent ahostsv4 challenges.cloudflare.com brunhild.challenges.cloudflare.com hagen.challenges.cloudflare.com
-          echo "--- DoH resolve"
-          doh() {
-            n=$1
-            for u in "https://1.1.1.1/dns-query?name=$n&type=A" "https://dns.google/resolve?name=$n&type=A"; do
-              ip=$(curl -s -m 12 -H 'accept: application/dns-json' "$u" | python3 -c 'import sys,json
-try:
-  d=json.load(sys.stdin)
-  a=[x["data"] for x in d.get("Answer",[]) if x.get("type")==1]
-  print(a[0] if a else "")
-except Exception: print("")')
-              if [ -n "$ip" ]; then echo "$n -> $ip (via $u)"; echo "$ip"; return 0; fi
-            done
-            return 1
-          }
-          CH=$(doh challenges.cloudflare.com | tail -1); BR=$(doh brunhild.challenges.cloudflare.com | tail -1); HG=$(doh hagen.challenges.cloudflare.com | tail -1)
-          [ -z "$CH" ] && CH=104.18.94.41
-          [ -z "$BR" ] && BR=104.18.8.208
-          [ -z "$HG" ] && HG=104.18.9.208
-          echo "resolved: CH=$CH BR=$BR HG=$HG"
-          echo "CH=$CH" >> "$GITHUB_ENV"; echo "BR=$BR" >> "$GITHUB_ENV"; echo "HG=$HG" >> "$GITHUB_ENV"
-          { echo "$CH challenges.cloudflare.com"; echo "$BR brunhild.challenges.cloudflare.com"; echo "$HG hagen.challenges.cloudflare.com"; } | sudo tee -a /etc/hosts
+          echo "--- before"
+          getent ahostsv4 challenges.cloudflare.com brunhild.challenges.cloudflare.com hagen.challenges.cloudflare.com || true
+          python3 resolve.py > doh.out 2> doh.err; cat doh.err
+          HOSTS=$(grep -E '^[0-9]' doh.out)
+          echo "$HOSTS" | sudo tee -a /etc/hosts
           printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' | sudo tee /etc/resolv.conf
+          grep -E '^(CH|BR|HG)=' doh.out >> "$GITHUB_ENV"
           echo "--- after: getent hosts each"
           for h in challenges.cloudflare.com brunhild.challenges.cloudflare.com hagen.challenges.cloudflare.com api.foxrouter.org; do echo -n "$h => "; getent hosts "$h" | head -2 | tr '\n' ' '; echo; done
       - uses: actions/setup-node@v4

@@ -4,7 +4,7 @@
 <script>
 window.__tok='';window.__ev=[];
 function go(){
- try{ window.turnstile.render('#ts',{sitekey:'0x4AAAAAAEGBqst_6XV04SLn',appearance:'always',size:'normal',retry:'auto',theme:'light',
+ try{ window.turnstile.render('#ts',{sitekey:'__SK__',appearance:'always',size:'normal',retry:'auto',theme:'light',
    callback:t=>{window.__tok=t;window.__ev.push('TOK')},
    'error-callback':e=>{window.__ev.push('ERR'+e);console.log('ERRCB '+e)},
    'before-interactive-callback':()=>{window.__ev.push('BEFORE');console.log('BEFORE')},

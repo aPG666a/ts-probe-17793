@@ -1,0 +1,15 @@
+<!doctype html><html><head><meta charset="utf-8"><title>ts</title>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer onload="go()"></script>
+</head><body><h3>ts</h3><div id="ts" style="width:320px;height:72px;border:1px dashed #aaa"></div>
+<script>
+window.__tok='';window.__ev=[];
+function go(){
+ try{ window.turnstile.render('#ts',{sitekey:'0x4AAAAAAEGBqst_6XV04SLn',appearance:'always',size:'normal',retry:'auto',theme:'light',
+   callback:t=>{window.__tok=t;window.__ev.push('TOK')},
+   'error-callback':e=>{window.__ev.push('ERR'+e);console.log('ERRCB '+e)},
+   'before-interactive-callback':()=>{window.__ev.push('BEFORE');console.log('BEFORE')},
+   'after-interactive-callback':()=>{window.__ev.push('AFTER');console.log('AFTER')},
+   'timeout-callback':()=>{window.__ev.push('TIMEOUT');console.log('TIMEOUT')}});}
+ catch(e){window.__ev.push('THROW:'+e)}
+}
+</script></body></html>
